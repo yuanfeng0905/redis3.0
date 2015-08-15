@@ -45,6 +45,7 @@ list *listCreate(void)
 
     if ((list = zmalloc(sizeof(*list))) == NULL)
         return NULL;
+
     list->head = list->tail = NULL;
     list->len = 0;
     list->dup = NULL;
@@ -66,7 +67,9 @@ void listRelease(list *list)
     len = list->len;
     while(len--) {
         next = current->next;
+        //若设置了free函数，则调用该自定义free函数
         if (list->free) list->free(current->value);
+        
         zfree(current);
         current = next;
     }

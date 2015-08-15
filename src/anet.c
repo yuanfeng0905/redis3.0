@@ -48,6 +48,7 @@
 
 #include "anet.h"
 
+//格式化错误信息，并存放在err中
 static void anetSetError(char *err, const char *fmt, ...)
 {
     va_list ap;
@@ -58,6 +59,7 @@ static void anetSetError(char *err, const char *fmt, ...)
     va_end(ap);
 }
 
+//根据non_block标识设置fd是否阻塞
 int anetSetBlock(char *err, int fd, int non_block) {
     int flags;
 
@@ -92,6 +94,8 @@ int anetBlock(char *err, int fd) {
 /* Set TCP keep alive option to detect dead peers. The interval option
  * is only used for Linux as we are using Linux-specific APIs to set
  * the probe send time, interval, and count. */
+ //设置TCP SO_KEEPALIVE，用以检测远程终端是否断了
+ //对于SO_KEEPALIVE,在指定时间内如果没有数据交互，那么会发送一个keep-alive probe，如果没有响应，那么套接字会被关闭
 int anetKeepAlive(char *err, int fd, int interval)
 {
     int val = 1;

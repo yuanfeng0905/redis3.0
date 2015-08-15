@@ -3,6 +3,7 @@
 1. 底层数据结构实现:
     链表：adlist.h/adlist.c
     字典：dict.h/dict.c
+    字符串：sds.h/sds.c
 
 2. 事件驱动
     ae.h/ae.c

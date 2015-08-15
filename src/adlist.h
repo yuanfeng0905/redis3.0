@@ -40,7 +40,7 @@
 typedef struct listNode {
     struct listNode *prev;
     struct listNode *next;
-    void *value;            //"多态"实现，可以存放任意类型的数据
+    void *value;                //"多态"实现，可以存放任意类型的数据
 } listNode;
 
 typedef struct listIter {
@@ -49,12 +49,12 @@ typedef struct listIter {
 } listIter;
 
 typedef struct list {
-    listNode *head;             //表头
-    listNode *tail;             //表尾
-    void *(*dup)(void *ptr);    //用于复制ptr值，实现深度复制
-    void (*free)(void *ptr);    //释放对应类型的结构内存
+    listNode *head;                     //表头
+    listNode *tail;                         //表尾
+    void *(*dup)(void *ptr);        //用于复制ptr值，实现深度复制
+    void (*free)(void *ptr);           //释放对应类型结构的内存
     int (*match)(void *ptr, void *key); //自定义匹配key
-    unsigned long len;          //节点数量
+    unsigned long len;                  //节点数量
 } list;
 
 /* Functions implemented as macros */
