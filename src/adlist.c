@@ -276,7 +276,7 @@ list *listDup(list *orig)
         void *value;
 
         if (copy->dup) {
-            //深度复制
+            //深度复制，自定义复制
             value = copy->dup(node->value);
             if (value == NULL) {
                 //复制出错

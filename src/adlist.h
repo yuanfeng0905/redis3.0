@@ -40,7 +40,7 @@
 typedef struct listNode {
     struct listNode *prev;
     struct listNode *next;
-    void *value;                //"多态"实现，可以存放任意类型的数据
+    void *value;                //通用实现，可以存放任意类型的数据
 } listNode;
 
 typedef struct listIter {
