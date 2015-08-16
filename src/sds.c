@@ -426,6 +426,7 @@ sds sdsfromlonglong(long long value) {
 }
 
 /* Like sdscatprintf() but gets va_list instead of being variadic. */
+//将可变参数列表以格式fmt追加到sds字符串s的尾部
 sds sdscatvprintf(sds s, const char *fmt, va_list ap) {
     va_list cpy;
     char staticbuf[1024], *buf = staticbuf, *t;
@@ -434,6 +435,7 @@ sds sdscatvprintf(sds s, const char *fmt, va_list ap) {
     /* We try to start using a static buffer for speed.
      * If not possible we revert to heap allocation. */
     if (buflen > sizeof(staticbuf)) {
+        //首先使用栈的缓存，如果不足则使用malloc分配一块缓存
         buf = zmalloc(buflen);
         if (buf == NULL) return NULL;
     } else {
@@ -443,15 +445,20 @@ sds sdscatvprintf(sds s, const char *fmt, va_list ap) {
     /* Try with buffers two times bigger every time we fail to
      * fit the string in the current buffer size. */
     while(1) {
+        //这里设置一个标识，用于判断缓存是否足够（如果刚刚好到buflen-2为‘\0’也会被视为失败再尝试一次）
         buf[buflen-2] = '\0';
         va_copy(cpy,ap);
         vsnprintf(buf, buflen, fmt, cpy);
         va_end(cpy);
+
         if (buf[buflen-2] != '\0') {
+            //缓存不足，重新分配大一倍的空间，以2的次方递增
             if (buf != staticbuf) zfree(buf);
+
             buflen *= 2;
             buf = zmalloc(buflen);
             if (buf == NULL) return NULL;
+
             continue;
         }
         break;
@@ -459,7 +466,9 @@ sds sdscatvprintf(sds s, const char *fmt, va_list ap) {
 
     /* Finally concat the obtained string to the SDS string and return it. */
     t = sdscat(s, buf);
+
     if (buf != staticbuf) zfree(buf);
+
     return t;
 }
 
@@ -479,12 +488,16 @@ sds sdscatvprintf(sds s, const char *fmt, va_list ap) {
  *
  * s = sdscatprintf(sdsempty(), "... your format ...", args);
  */
+//将可变参数以格式fmt追加到sds字符串s的尾部
 sds sdscatprintf(sds s, const char *fmt, ...) {
+
     va_list ap;
     char *t;
+    //将可变参数转换为va_list
     va_start(ap, fmt);
     t = sdscatvprintf(s,fmt,ap);
     va_end(ap);
+
     return t;
 }
 
@@ -504,10 +517,13 @@ sds sdscatprintf(sds s, const char *fmt, ...) {
  * %U - 64 bit unsigned integer (unsigned long long, uint64_t)
  * %% - Verbatim "%" character.
  */
+ //格式化字符串，并拼接到sds字符串s的尾部
+//这里作者认为libc库的sprintf实现性能较差，所以实现了该功能以提高性能
 sds sdscatfmt(sds s, char const *fmt, ...) {
     struct sdshdr *sh = (void*) (s-(sizeof(struct sdshdr)));
     size_t initlen = sdslen(s);
     const char *f = fmt;
+    //i 为下次写入sds的位置
     int i;
     va_list ap;
 
@@ -530,12 +546,16 @@ sds sdscatfmt(sds s, char const *fmt, ...) {
         case '%':
             next = *(f+1);
             f++;
+
             switch(next) {
             case 's':
             case 'S':
+                //字符串类型
                 str = va_arg(ap,char*);
+                //s 为C字符串类型, S为sds字符串类型
                 l = (next == 's') ? strlen(str) : sdslen(str);
                 if (sh->free < l) {
+                    //剩余内存不足
                     s = sdsMakeRoomFor(s,l);
                     sh = (void*) (s-(sizeof(struct sdshdr)));
                 }
@@ -544,12 +564,15 @@ sds sdscatfmt(sds s, char const *fmt, ...) {
                 sh->free -= l;
                 i += l;
                 break;
+
             case 'i':
             case 'I':
+                //有符号整型
                 if (next == 'i')
                     num = va_arg(ap,int);
                 else
                     num = va_arg(ap,long long);
+                //这里设置一个块，限制buf这个变量的作用域
                 {
                     char buf[SDS_LLSTR_SIZE];
                     l = sdsll2str(buf,num);
@@ -563,12 +586,15 @@ sds sdscatfmt(sds s, char const *fmt, ...) {
                     i += l;
                 }
                 break;
+
             case 'u':
             case 'U':
+                //无符号整型
                 if (next == 'u')
                     unum = va_arg(ap,unsigned int);
                 else
                     unum = va_arg(ap,unsigned long long);
+
                 {
                     char buf[SDS_LLSTR_SIZE];
                     l = sdsull2str(buf,unum);
@@ -582,13 +608,16 @@ sds sdscatfmt(sds s, char const *fmt, ...) {
                     i += l;
                 }
                 break;
+
             default: /* Handle %% and generally %<unknown>. */
+                //处理非sSiIuU类型
                 s[i++] = next;
                 sh->len += 1;
                 sh->free -= 1;
                 break;
             }
             break;
+            //下面这个处理非%号的字符
         default:
             s[i++] = *f;
             sh->len += 1;
@@ -756,13 +785,17 @@ int sdscmp(const sds s1, const sds s2) {
  * requires length arguments. sdssplit() is just the
  * same function but for zero-terminated strings.
  */
- //使用sep分割字符串s，返回sds字符串数组，其大小通过count返回
+ /*使用sep分割字符串s，返回sds字符串数组，其大小通过count返回
+ *  所分割后的sds数组可通过sdsfreesplitres释放
+ */
 sds *sdssplitlen(const char *s, int len, const char *sep, int seplen, int *count) {
+    //start存放s子字符串开始位置
     int elements = 0, slots = 5, start = 0, j;
     sds *tokens;
 
     if (seplen < 1 || len < 0) return NULL;
 
+    //首先初始分配5个元素的sds字符串指针数组。后续不足再重新分配
     tokens = zmalloc(sizeof(sds)*slots);
     if (tokens == NULL) return NULL;
 
@@ -773,6 +806,7 @@ sds *sdssplitlen(const char *s, int len, const char *sep, int seplen, int *count
 
     for (j = 0; j < (len-(seplen-1)); j++) {
         /* make sure there is room for the next element and the final one */
+        //保证有足够的空间存放下一个元素以及最后一个元素
         if (slots < elements+2) {
             sds *newtokens;
 
@@ -781,16 +815,21 @@ sds *sdssplitlen(const char *s, int len, const char *sep, int seplen, int *count
             if (newtokens == NULL) goto cleanup;
             tokens = newtokens;
         }
+
         /* search the separator */
         if ((seplen == 1 && *(s+j) == sep[0]) || (memcmp(s+j,sep,seplen) == 0)) {
+            // 截取 [start, j]之间的字符串
             tokens[elements] = sdsnewlen(s+start,j-start);
             if (tokens[elements] == NULL) goto cleanup;
             elements++;
+            //偏移至下一个子字符串
             start = j+seplen;
+            //跳过分隔符
             j = j+seplen-1; /* skip the separator */
         }
     }
     /* Add the final element. We are sure there is room in the tokens array. */
+    //这里即使最后一段为分割符，sdsnewlen也会返回一个包含‘\0’的字符串，而不会返回空指针
     tokens[elements] = sdsnewlen(s+start,len-start);
     if (tokens[elements] == NULL) goto cleanup;
     elements++;
@@ -865,7 +904,7 @@ int is_hex_digit(char c) {
 
 /* Helper function for sdssplitargs() that converts a hex digit into an
  * integer from 0 to 15 */
-//将16进制字符转为十进制数字
+/*将16进制字符转为十进制数字*/
 int hex_digit_to_int(char c) {
     switch(c) {
     case '0': return 0;
@@ -907,6 +946,11 @@ int hex_digit_to_int(char c) {
  * quotes or closed quotes followed by non space characters
  * as in: "foo"bar or "foo'
  */
+ /* 将字符串line分割转换为sds字符串，其中以'\0' '\n' '\r' ' ' '\t'分割，
+ *  注：允许 demo"hello" demo类型字符串，但是"结尾下一个字符必须符合isspace()
+ *  即demo"hello"demo类型字符串会以失败处理
+*   会对双引号的内容进行解析，不对单引号的内容解析
+*/
 sds *sdssplitargs(const char *line, int *argc) {
     const char *p = line;
     char *current = NULL;
@@ -916,6 +960,7 @@ sds *sdssplitargs(const char *line, int *argc) {
     while(1) {
         /* skip blanks */
         while(*p && isspace(*p)) p++;
+
         if (*p) {
             /* get a token */
             int inq=0;  /* set to 1 if we are in "quotes" */
@@ -923,84 +968,103 @@ sds *sdssplitargs(const char *line, int *argc) {
             int done=0;
 
             if (current == NULL) current = sdsempty();
+
             while(!done) {
-                if (inq) {
-                    if (*p == '\\' && *(p+1) == 'x' &&
-                                             is_hex_digit(*(p+2)) &&
-                                             is_hex_digit(*(p+3)))
-                    {
-                        unsigned char byte;
 
-                        byte = (hex_digit_to_int(*(p+2))*16)+
-                                hex_digit_to_int(*(p+3));
-                        current = sdscatlen(current,(char*)&byte,1);
-                        p += 3;
-                    } else if (*p == '\\' && *(p+1)) {
-                        char c;
+                if (inq) {      // " 双引号开始
+                        //这里的解析和sdscatrepr()封装相对应
+                            if (*p == '\\' && *(p+1) == 'x' &&
+                                                     is_hex_digit(*(p+2)) &&
+                                                     is_hex_digit(*(p+3)))          //字符形式的十六进制
+                            {
+                                    unsigned char byte;
 
-                        p++;
-                        switch(*p) {
-                        case 'n': c = '\n'; break;
-                        case 'r': c = '\r'; break;
-                        case 't': c = '\t'; break;
-                        case 'b': c = '\b'; break;
-                        case 'a': c = '\a'; break;
-                        default: c = *p; break;
+                                    byte = ( hex_digit_to_int(*(p+2)) * 16 ) +
+                                            hex_digit_to_int( *(p+3) );
+                                    current = sdscatlen(current,(char*)&byte,1);
+                                    //跳过3个字符，后面循环的时候 p++，则刚刚好
+                                    p += 3;
+
+                            } else if (*p == '\\' && *(p+1)) {
+                                    char c;
+
+                                    p++;
+                                    switch(*p) {
+                                    case 'n': c = '\n'; break;
+                                    case 'r': c = '\r'; break;
+                                    case 't': c = '\t'; break;
+                                    case 'b': c = '\b'; break;
+                                    case 'a': c = '\a'; break;
+                                    default: c = *p; break;
+                                    }
+                                    current = sdscatlen(current,&c,1);
+
+                            } else if (*p == '"') {
+                                    /* closing quote must be followed by a space or
+                                     * nothing at all. */
+                                //" 引号结束下一个字符必须满足isspace条件（空格，回车etc）
+                                    if (*(p+1) && !isspace(*(p+1))) goto err;
+                                    done=1;
+
+                            } else if (!*p) {
+                                //缺少" 引号结尾
+                                /* unterminated quotes */
+                                goto err;
+
+                            } else {
+                                current = sdscatlen(current,p,1);
+                            }
+
+                } else if (insq) {      //单引号开始
+                        //对于单引号内的内容不解析（单引号除外 \'）
+                        if (*p == '\\' && *(p+1) == '\'') {
+                            p++;
+                            current = sdscatlen(current,"'",1);
+
+                        } else if (*p == '\'') {
+                            /* closing quote must be followed by a space or
+                             * nothing at all. */
+                            if (*(p+1) && !isspace(*(p+1))) goto err;
+                            done=1;
+
+                        } else if (!*p) {
+                            /* unterminated quotes */
+                            goto err;
+                        } else {
+                            current = sdscatlen(current,p,1);
                         }
-                        current = sdscatlen(current,&c,1);
-                    } else if (*p == '"') {
-                        /* closing quote must be followed by a space or
-                         * nothing at all. */
-                        if (*(p+1) && !isspace(*(p+1))) goto err;
-                        done=1;
-                    } else if (!*p) {
-                        /* unterminated quotes */
-                        goto err;
-                    } else {
-                        current = sdscatlen(current,p,1);
-                    }
-                } else if (insq) {
-                    if (*p == '\\' && *(p+1) == '\'') {
-                        p++;
-                        current = sdscatlen(current,"'",1);
-                    } else if (*p == '\'') {
-                        /* closing quote must be followed by a space or
-                         * nothing at all. */
-                        if (*(p+1) && !isspace(*(p+1))) goto err;
-                        done=1;
-                    } else if (!*p) {
-                        /* unterminated quotes */
-                        goto err;
-                    } else {
-                        current = sdscatlen(current,p,1);
-                    }
+
                 } else {
-                    switch(*p) {
-                    case ' ':
-                    case '\n':
-                    case '\r':
-                    case '\t':
-                    case '\0':
-                        done=1;
-                        break;
-                    case '"':
-                        inq=1;
-                        break;
-                    case '\'':
-                        insq=1;
-                        break;
-                    default:
-                        current = sdscatlen(current,p,1);
-                        break;
-                    }
+                            switch(*p) {
+                            case ' ':
+                            case '\n':
+                            case '\r':
+                            case '\t':
+                            case '\0':
+                                done=1;
+                                break;
+                            case '"':
+                                inq=1;
+                                break;
+                            case '\'':
+                                insq=1;
+                                break;
+                            default:
+                                current = sdscatlen(current,p,1);
+                                break;
+                            }
                 }
+
                 if (*p) p++;
-            }
+
+            } // -- end of while
+
             /* add the token to the vector */
             vector = zrealloc(vector,((*argc)+1)*sizeof(char*));
             vector[*argc] = current;
             (*argc)++;
             current = NULL;
+
         } else {
             /* Even on empty input string return something not NULL. */
             if (vector == NULL) vector = zmalloc(sizeof(void*));
@@ -1026,12 +1090,18 @@ err:
  *
  * The function returns the sds string pointer, that is always the same
  * as the input pointer since no resize is needed. */
+ /* 将sds中字符等于from[j]替换为to[j]中的字符，其中 j >= 0 && j < setlen
+ *  即sds中hello，from=ho，to=01，其中sds中的h与from[0]相等，则以to[0]替换
+ */
 sds sdsmapchars(sds s, const char *from, const char *to, size_t setlen) {
     size_t j, i, l = sdslen(s);
 
+    //遍历sds每个字符
     for (j = 0; j < l; j++) {
+        //遍历from的每个字符
         for (i = 0; i < setlen; i++) {
             if (s[j] == from[i]) {
+                //替换
                 s[j] = to[i];
                 break;
             }

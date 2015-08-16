@@ -77,8 +77,9 @@ void sdsfree(sds s);
 //获取sdshdr结构可用内存的大小
 size_t sdsavail(const sds s);
 
-//增加sds字符串的长度，确保其长度大于等于len,如果sds长度大于len，则什么都不做,
-//否则，将其使用长度扩展为len，并将多余的扩展空间置为0
+/*  增加sds字符串的长度，确保其长度大于等于len,如果sds长度大于len，则什么都不做,
+*   否则，将其使用长度扩展为len，并将多余的扩展空间置为0
+*/
 sds sdsgrowzero(sds s, size_t len);
 
  //将t所指向的内容追加到sds字符串中
@@ -96,14 +97,19 @@ sds sdscpylen(sds s, const char *t, size_t len);
 //将C字符串复制到sds字符串中（覆盖）
 sds sdscpy(sds s, const char *t);
 
+//将可变参数列表以格式fmt追加到sds字符串s的尾部
 sds sdscatvprintf(sds s, const char *fmt, va_list ap);
 #ifdef __GNUC__
+//将可变参数以格式fmt追加到sds字符串s的尾部
 sds sdscatprintf(sds s, const char *fmt, ...)
     __attribute__((format(printf, 2, 3)));
 #else
 sds sdscatprintf(sds s, const char *fmt, ...);
 #endif
 
+/*  格式化字符串，并拼接到sds字符串s的尾部
+*   这里作者认为libc库的sprintf实现性能较差，所以实现了该功能以提高性能
+*/
 sds sdscatfmt(sds s, char const *fmt, ...);
 
 //去掉sds字符串中前缀和后缀包含cset的字符
@@ -118,12 +124,17 @@ void sdsupdatelen(sds s);
 //清空sds字符串，但是不释放空间
 void sdsclear(sds s);
 
- //sds字符串之间比较，首先比较minlen范围的内容，若内容一致，则比较两个字符串的长度
- // minlen = len(s1), len(s2)
+ /*sds字符串之间比较，首先比较minlen范围的内容，若内容一致，则比较两个字符串的长度
+ *  minlen = len(s1), len(s2)
+ */
 int sdscmp(const sds s1, const sds s2);
 
+ /*使用sep分割字符串s，返回sds字符串数组，其大小通过count返回
+ *  所分割后的sds数组可通过sdsfreesplitres释放
+ */
 sds *sdssplitlen(const char *s, int len, const char *sep, int seplen, int *count);
 
+//释放由sdssplitlen()函数返回的数据
 void sdsfreesplitres(sds *tokens, int count);
 
 //将sds字符串转换为小写字符
@@ -135,10 +146,19 @@ void sdstoupper(sds s);
  //将long long值转为sds字符串
 sds sdsfromlonglong(long long value);
 
+ //将p所指向的内容转换为可视字符，添加到sds字符串尾部（其中转换后的字符串前后添加了""）
 sds sdscatrepr(sds s, const char *p, size_t len);
 
+ /* 将字符串line分割转换为sds字符串，其中以'\0' '\n' '\r' ' ' '\t'分割，
+ *  注：允许 demo"hello" demo类型字符串，但是"结尾下一个字符必须符合isspace()
+ *  即demo"hello"demo类型字符串会以失败处理
+*   会对双引号的内容进行解析，不对单引号的内容解析
+*/
 sds *sdssplitargs(const char *line, int *argc);
 
+ /* 将sds中字符等于from[j]替换为to[j]中的字符，其中 j >= 0 && j < setlen
+ *  即sds中hello，from=ho，to=01，其中sds中的h与from[0]相等，则以to[0]替换
+ */
 sds sdsmapchars(sds s, const char *from, const char *to, size_t setlen);
 
 //将字符串数组argv通过sep字符串连接起来，并存为sds字符串
