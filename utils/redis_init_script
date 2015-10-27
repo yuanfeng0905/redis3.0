@@ -3,13 +3,18 @@
 # Simple Redis init.d script conceived to work on Linux systems
 # as it does use of the /proc filesystem.
 
+#Redis监听的端口
 REDISPORT=6379
+#Redis可执行文件路径，该路径为默认安装的路径
 EXEC=/usr/local/bin/redis-server
+#Redis客户端可执行文件路径
 CLIEXEC=/usr/local/bin/redis-cli
-
+#脚本通过这个文件来判断redis是否正在运行
 PIDFILE=/var/run/redis_${REDISPORT}.pid
+#配置文件的路径，默认该路径下没有配置文件，需要手工添加
 CONF="/etc/redis/${REDISPORT}.conf"
 
+#通过参数选择启动还是关闭，启动方式为 ./redis_init_script start
 case "$1" in
     start)
         if [ -f $PIDFILE ]

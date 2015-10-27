@@ -48,7 +48,7 @@
 typedef struct dictEntry {
     void *key;
     union {
-        void *val;      //特定类型
+        void *val;          //特定类型
         uint64_t u64;
         int64_t s64;
         double d;
@@ -88,6 +88,7 @@ typedef struct dict {
     void *privdata;
     //哈希表，ht[1]仅用于rehash的时候
     dictht ht[2];
+    //如果不等于-1标示正在重映射(rehashing)
     long rehashidx; /* rehashing not in progress if rehashidx == -1 */
     int iterators; /* number of iterators currently running */
 } dict;
@@ -161,8 +162,16 @@ typedef void (dictScanFunction)(void *privdata, const dictEntry *de);
 #define dictIsRehashing(d) ((d)->rehashidx != -1)
 
 /* API */
+//创建一个字典dict
 dict *dictCreate(dictType *type, void *privDataPtr);
+
+/*扩展或创建哈希表，其中d为需要扩展哈希表的字典，size为需要扩展后的大小
+    （实际扩展的大小为大于size的最小2^n）
+    扩展或创建取决与d->ht[0]是否为NULL，若是，则是第一次使用，
+    否则，将其存放在ht[1]中用于rehashing
+*/
 int dictExpand(dict *d, unsigned long size);
+
 int dictAdd(dict *d, void *key, void *val);
 dictEntry *dictAddRaw(dict *d, void *key);
 int dictReplace(dict *d, void *key, void *val);
@@ -172,7 +181,10 @@ int dictDeleteNoFree(dict *d, const void *key);
 void dictRelease(dict *d);
 dictEntry * dictFind(dict *d, const void *key);
 void *dictFetchValue(dict *d, const void *key);
+
+//重新调整哈希表，减小哈希表的大小，使得大小满足填充的所有元素的最小值或者设定的最小阈值
 int dictResize(dict *d);
+
 dictIterator *dictGetIterator(dict *d);
 dictIterator *dictGetSafeIterator(dict *d);
 dictEntry *dictNext(dictIterator *iter);
@@ -185,8 +197,16 @@ unsigned int dictGenCaseHashFunction(const unsigned char *buf, int len);
 void dictEmpty(dict *d, void(callback)(void*));
 void dictEnableResize(void);
 void dictDisableResize(void);
+
+ /*重映射字典d的哈希表，其中n为每次重映射的bucket个数（一个bucket,例如：table[0]）
+    返回值：0表示rehashing结束，1表示还有元素需要rehashing
+    注：这里使用empty_visits=n*10控制rehash的时间，防止这个函数阻塞过久
+ */
 int dictRehash(dict *d, int n);
+
+//在ms时间(毫秒)内进行rehash
 int dictRehashMilliseconds(dict *d, int ms);
+
 void dictSetHashFunctionSeed(unsigned int initval);
 unsigned int dictGetHashFunctionSeed(void);
 unsigned long dictScan(dict *d, unsigned long v, dictScanFunction *fn, void *privdata);
